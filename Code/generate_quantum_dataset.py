@@ -1,4 +1,6 @@
-from numpy import random, matmul, trace, array, sum, zeros, complex128, kron
+from numpy import random, matmul, trace, array, sum, kron
+from numpy import eye, transpose
+from scipy.linalg import eigvals
 
 
 def generate_hermitian_product_states(size, n_matrices):
@@ -24,7 +26,7 @@ def generate_hermitian_product_states(size, n_matrices):
     return array(product_states)
 
 
-def generate_coefficients(n, entangled):
+def generate_coefficients(n):
     """
     Generates a list of n random coefficients that sum to 1
     Input:
@@ -33,14 +35,12 @@ def generate_coefficients(n, entangled):
         coefficients: numpy array of n coefficients
     """
     rand_numbers = random.rand(n)
-
-    if not entangled:
-        rand_numbers /= sum(rand_numbers)
+    rand_numbers /= sum(rand_numbers)
 
     return rand_numbers
 
 
-def generate_states(dimensions, n_matrices, n_states, entangled):
+def generate_separable_states(n_matrices, n_states):
     """Generates a list of random separable states of the given dimension
     Input:
         dimensions: size of the matrices
@@ -48,27 +48,59 @@ def generate_states(dimensions, n_matrices, n_states, entangled):
         n_states: number of separable states to generate
     Output:
         separable_states: 3D numpy array of separable states,
-        of size n_states * dimensions^n_matrices
+        of size n_states x dimensions^n_matrices
     """
+
     states = []
 
     for _ in range(n_states):
-        product_states = generate_hermitian_product_states(dimensions,
-                                                           n_matrices)
+        rhoA = generate_hermitian_product_states(2, n_matrices)
+        rhoB = generate_hermitian_product_states(2, n_matrices)
+        coeffs = generate_coefficients(n_matrices)
 
-        coeffs = generate_coefficients(n=n_matrices, entangled=entangled)
+        sep_state = 0
 
-        state = zeros(dimensions ** n_matrices, dtype=complex128)
+        for i in range(n_matrices):
+            sep_state += coeffs[i] * kron(rhoA[i], rhoB[i])
 
-        for j in range(dimensions):
-            result = product_states[0][:, j]
+        states.append(sep_state)
 
-            for i in range(1, n_matrices):
-                result = kron(result, product_states[i][:, j])
-            result *= coeffs[j]
+    return array(states)
 
-            state += result
 
-        states.append(state)
+# Entanglement check
+def is_entangled(rho):
+    # Check if the density matrix is 4x4
+    if rho.shape != (4, 4):
+        raise ValueError("The input matrix should be a 4x4 density matrix.")
 
+    # Calculate the partial transpose of the density matrix
+    pauli_mat_B = array([[1, 0], [0, -1]])
+    identity_mat = eye(2)
+    
+    transpose_op = kron(identity_mat, pauli_mat_B)
+    rho_T_B = transpose_op @ transpose(rho) @ transpose_op
+
+    # rho_T_B = kron(eye(2), array([[1, 0], [0, -1]])) @
+    # conjugate(transpose(rho)) @
+    # kron(eye(2), array([[1, 0], [0, -1]]))
+
+    # Check if any eigenvalue of the partial transpose is negative
+    eigenvalues = eigvals(rho_T_B)
+
+    return any(eig < 0 for eig in eigenvalues)
+
+
+def generate_entangled_states(n_states):
+
+    states = []
+    i = 0
+    while i < n_states:
+        rand_state = random.rand(4, 4)
+
+        if is_entangled(rand_state):
+            states.append(rand_state)
+            i += 1
+        else:
+            continue
     return array(states)
